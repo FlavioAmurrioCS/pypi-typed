@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 import httpx
@@ -16,7 +17,12 @@ from pypi_typed.types.types import ProvenanceForFileResponse
 from pypi_typed.types.types import ReleaseResponse
 
 if TYPE_CHECKING:
+    from typing import Literal
+    from typing import TypeVar
+
     from pypi_typed.types.http import AsyncHttpRequest
+
+    T = TypeVar("T")
 
 projects = [
     "aiobotocore",
@@ -40,71 +46,148 @@ projects = [
     "six",
     "typing-extensions",
     "virtualenv",
+    "uv-to-pipfile",
 ]
-projects_versions = [("virtualenv", "21.2.4")]
-project_version_filenames = [("virtualenv", "21.2.4", "virtualenv-21.2.4-py3-none-any.whl")]
+projects_versions = [("lambda-dev-server", "0.0.8")]
+project_version_filenames = [
+    ("lambda-dev-server", "0.0.8", "lambda_dev_server-0.0.8-py3-none-any.whl")
+]
 
 
-@pytest.fixture
-def pypi_api_client() -> PypiApiClient[AsyncHttpRequest]:
-    async_client = httpx.AsyncClient(base_url="https://pypi.org")
-    return PypiApiClient(client=sqlite_cache(days=1)(async_client.request))
+def validate_shape(obj: object, _type: type[T]) -> T:
+    return TypeAdapter(_type).validate_python(obj, extra="forbid", strict=True)
 
 
-async def test_list_all_projects_types(pypi_api_client: PypiApiClient[AsyncHttpRequest]) -> None:
+def create_async_client(
+    base_url: str, output: Literal["json", "html"] = "json"
+) -> PypiApiClient[AsyncHttpRequest]:
+    async_client = httpx.AsyncClient(base_url=base_url)
+    request_func = async_client.request
+    async_client.send = sqlite_cache(days=1)(async_client.send)  # type: ignore[method-assign,unused-ignore]
+    return PypiApiClient(client=request_func, output=output)
+
+
+INDEX_PYPI = "https://pypi.org/"
+INDEX_FLAVIO = "https://flavioamurriocs.github.io/pypi/"
+INDEX_SENTRY = "https://pypi.devinfra.sentry.io/"
+
+
+@pytest.mark.parametrize("base_url", [INDEX_PYPI, INDEX_FLAVIO, INDEX_SENTRY])
+@pytest.mark.parametrize("output", ["json", "html"])
+async def test_types_list_all_projects(base_url: str, output: Literal["json", "html"]) -> None:
+    pypi_api_client = create_async_client(base_url=base_url, output=output)
     response = await pypi_api_client.list_all_projects()
-    TypeAdapter(ListAllProjectsResponse).validate_python(response, extra="forbid", strict=True)
+    validate_shape(response, ListAllProjectsResponse)
 
 
-# @pytest.mark.asyncio
+@pytest.mark.parametrize("base_url", [INDEX_PYPI])
+@pytest.mark.parametrize("output", ["json", "html"])
 @pytest.mark.parametrize("project", projects)
-async def test_get_a_project_types(
-    pypi_api_client: PypiApiClient[AsyncHttpRequest], project: str
+async def test_types_get_distributions_for_project(
+    base_url: str, output: Literal["json", "html"], project: str
 ) -> None:
-    response = await pypi_api_client.get_a_project(project=project)
-    TypeAdapter(ProjectResponse).validate_python(response, extra="forbid", strict=True)
-
-
-@pytest.mark.parametrize("project", projects)
-async def test_get_distributions_for_project_types(
-    pypi_api_client: PypiApiClient[AsyncHttpRequest], project: str
-) -> None:
+    pypi_api_client = create_async_client(base_url=base_url, output=output)
     response = await pypi_api_client.get_distributions_for_project(project=project)
-    TypeAdapter(DistributionsForProjectResponse).validate_python(
-        response, extra="forbid", strict=True
-    )
+    validate_shape(response, DistributionsForProjectResponse)
 
 
-@pytest.mark.parametrize("project_version", projects_versions)
-async def test_get_a_release_types(
-    pypi_api_client: PypiApiClient[AsyncHttpRequest], project_version: tuple[str, str]
+@pytest.mark.parametrize("base_url", [INDEX_PYPI, INDEX_FLAVIO])
+@pytest.mark.parametrize("project", ["uv-to-pipfile"])
+async def test_types_get_a_project(base_url: str, project: str) -> None:
+    pypi_api_client = create_async_client(base_url=base_url, output="json")
+    response = await pypi_api_client.get_a_project(project=project)
+    validate_shape(response, ProjectResponse)
+
+
+@pytest.mark.parametrize("base_url", [INDEX_PYPI, INDEX_FLAVIO])
+@pytest.mark.parametrize(("project", "version"), projects_versions)
+async def test_types_get_a_release(base_url: str, project: str, version: str) -> None:
+    pypi_api_client = create_async_client(base_url=base_url, output="json")
+    response = await pypi_api_client.get_a_release(project=project, version=version)
+    validate_shape(response, ReleaseResponse)
+
+
+@pytest.mark.parametrize("base_url", [INDEX_PYPI])
+@pytest.mark.parametrize(("project", "version", "filename"), project_version_filenames)
+async def test_types_get_provenance_for_file(
+    base_url: str, project: str, version: str, filename: str
 ) -> None:
-    response = await pypi_api_client.get_a_release(
-        project=project_version[0], version=project_version[1]
-    )
-    TypeAdapter(ReleaseResponse).validate_python(response, extra="forbid", strict=True)
-
-
-@pytest.mark.parametrize("project_version_filename", project_version_filenames)
-async def test_get_provenance_for_file_types(
-    pypi_api_client: PypiApiClient[AsyncHttpRequest],
-    project_version_filename: tuple[str, str, str],
-) -> None:
+    pypi_api_client = create_async_client(base_url=base_url)
     response = await pypi_api_client.get_provenance_for_file(
-        project=project_version_filename[0],
-        version=project_version_filename[1],
-        filename=project_version_filename[2],
+        project=project,
+        version=version,
+        filename=filename,
     )
-    TypeAdapter(ProvenanceForFileResponse).validate_python(response, extra="forbid", strict=True)
+    validate_shape(response, ProvenanceForFileResponse)
 
 
-async def test_project_stats_types(pypi_api_client: PypiApiClient[AsyncHttpRequest]) -> None:
+@pytest.mark.parametrize("base_url", [INDEX_PYPI])
+async def test_types_project_stats(base_url: str) -> None:
+    pypi_api_client = create_async_client(base_url=base_url)
     response = await pypi_api_client.project_stats()
-    TypeAdapter(ProjectStatsResponse).validate_python(response, extra="forbid", strict=True)
+    validate_shape(response, ProjectStatsResponse)
 
 
-# @pytest.mark.parametrize("package", packages)
-# def test_types(package: str) -> None:
-#     """Validate GetDistributionsForProjectResponse from JSON API"""
-#     json_data = json.loads(_get_text(f"/simple/{package}/", "json"))
-#     TypeAdapter(types.GetDistributionsForProjectResponse).validate_python(json_data)
+async def test_parity_list_all_projects() -> None:
+    html_client = create_async_client(INDEX_PYPI, output="html")
+    json_client = create_async_client(INDEX_PYPI, output="json")
+    html_response, json_response = await asyncio.gather(
+        html_client.list_all_projects(), json_client.list_all_projects()
+    )
+    # We expect html and json responses to be different,
+    # if they are the same it means json endpoint is returning html instead of json
+    assert html_response != json_response
+
+    html_names = {x["name"] for x in html_response["projects"]}
+    json_names = {x["name"] for x in json_response["projects"]}
+    common_names = html_names & json_names
+    only_html_names = html_names - json_names
+    only_json_names = json_names - html_names
+
+    # print()
+    # print(f"Only in HTML: {len(only_html_names)=} {sorted(only_html_names)}")
+    # print(f"Only in JSON: {len(only_json_names)=} {sorted(only_json_names)}")
+    diff_limit = 100
+    assert len(only_html_names) < diff_limit
+    assert len(only_json_names) < diff_limit
+
+    json_response["projects"] = sorted(
+        (p for p in json_response["projects"] if p["name"] in common_names), key=lambda x: x["name"]
+    )
+    html_response["projects"] = sorted(
+        (p for p in html_response["projects"] if p["name"] in common_names), key=lambda x: x["name"]
+    )
+    for p in json_response["projects"]:
+        p.pop("_last-serial", None)  # type: ignore[misc]
+    for p in html_response["projects"]:
+        p.pop("_last-serial", None)  # type: ignore[misc]
+    html_response["meta"].pop("_last-serial", None)  # type: ignore[misc]
+    json_response["meta"].pop("_last-serial", None)  # type: ignore[misc]
+
+    assert html_response == json_response
+
+
+@pytest.mark.parametrize("project", projects)
+async def test_parity_get_distributions_for_project(project: str) -> None:
+    html_client = create_async_client(INDEX_PYPI, output="html")
+    json_client = create_async_client(INDEX_PYPI, output="json")
+    html_response, json_response = await asyncio.gather(
+        html_client.get_distributions_for_project(project=project),
+        json_client.get_distributions_for_project(project=project),
+    )
+
+    # We expect html and json responses to be different,
+    # if they are the same it means json endpoint is returning html instead of json
+    assert html_response != json_response
+
+    for file in html_response["files"]:
+        file.pop("upload-time", None)  # type: ignore[misc]
+        file.pop("size", None)  # type: ignore[misc]
+    for file in json_response["files"]:
+        file.pop("upload-time", None)  # type: ignore[misc]
+        file.pop("size", None)  # type: ignore[misc]
+
+    html_response["versions"].sort()
+    json_response["versions"].sort()
+
+    assert html_response == json_response

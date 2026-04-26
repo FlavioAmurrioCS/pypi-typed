@@ -5,8 +5,12 @@ from dataclasses import dataclass
 from inspect import isawaitable
 from typing import TYPE_CHECKING
 from typing import Generic
+from typing import Literal
 from typing import TypeVar
 from typing import overload
+
+from pypi_typed._index import html_to_distribution
+from pypi_typed._index import html_to_listallprojects
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
@@ -56,6 +60,13 @@ def helper(
     return mapper(e)
 
 
+def html_json_response_handler(text: str, parser: Callable[[str], T]) -> T:
+    try:
+        return json.loads(text)  # zuban: ignore[no-any-return]
+    except json.JSONDecodeError:
+        return parser(text)
+
+
 @dataclass
 class PypiIndexClient(Generic[HttpRequest]):
     ############################################################################
@@ -66,6 +77,7 @@ class PypiIndexClient(Generic[HttpRequest]):
     """
 
     client: HttpRequest
+    output: Literal["json", "html"] = "json"
 
     @overload
     def list_all_projects(self: PypiIndexClient[SyncHttpRequest]) -> ListAllProjectsResponse: ...
@@ -81,9 +93,11 @@ class PypiIndexClient(Generic[HttpRequest]):
         args: Arguments = {
             "method": "GET",
             "url": "/simple/",
-            "headers": {"Accept": "application/vnd.pypi.simple.v1+json"},
+            "headers": {"Accept": f"application/vnd.pypi.simple.v1+{self.output}"},
         }
-        return helper(self.client, args, lambda x: json.loads(x.text))
+        return helper(
+            self.client, args, lambda x: html_json_response_handler(x.text, html_to_listallprojects)
+        )
 
     @overload
     def get_distributions_for_project(
@@ -103,9 +117,11 @@ class PypiIndexClient(Generic[HttpRequest]):
         args: Arguments = {
             "method": "GET",
             "url": f"/simple/{project}/",
-            "headers": {"Accept": "application/vnd.pypi.simple.v1+json"},
+            "headers": {"Accept": f"application/vnd.pypi.simple.v1+{self.output}"},
         }
-        return helper(self.client, args, lambda x: json.loads(x.text))
+        return helper(
+            self.client, args, lambda x: html_json_response_handler(x.text, html_to_distribution)
+        )
 
     ############################################################################
     # endregion: Index API
@@ -255,21 +271,20 @@ class PypiApiClient(
 ): ...
 
 
-# if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
 
-#     async def main() -> None:
-#         import httpx
+    async def main() -> None:
+        import httpx
 
-#         # base_url = "https://pypi.devinfra.sentry.io/"
-#         base_url = "https://flavioamurriocs.github.io/pypi/"
-#         httpx.Client(base_url=base_url)
-#         async_client = httpx.AsyncClient(base_url=base_url)
-#         req: AsyncHttpRequest = async_client.request
-#         combined = PypiApiClient(client=req)
-#         # e = await combined.json.get_a_project("uv-to-pipfile")
-#         e = await combined.list_all_projects()
-#         print(e)
+        # base_url = "https://pypi.devinfra.sentry.io/"
+        base_url = "https://flavioamurriocs.github.io/pypi/"
+        combined: PypiApiClient[AsyncHttpRequest] = PypiApiClient(
+            client=httpx.AsyncClient(base_url=base_url).request
+        )
+        # e = await combined.json.get_a_project("uv-to-pipfile")
+        e = await combined.list_all_projects()
+        print(e)
 
-#     import asyncio
+    import asyncio
 
-#     asyncio.run(main())
+    asyncio.run(main())

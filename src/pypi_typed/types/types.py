@@ -184,10 +184,12 @@ class _DistributionsForProjectResponseProjectStatus(TypedDict):
     status: str
 
 
-class _DistributionsForProjectResponseHash(TypedDict):
-    sha256: str
+# class _DistributionsForProjectResponseHash(TypedDict):
+#     sha256: str
 
 
+# OptionalHash = _DistributionsForProjectResponseHash | Literal[False]
+_DistributionsForProjectResponseHash = dict[str, str]
 OptionalHash = _DistributionsForProjectResponseHash | Literal[False]
 
 

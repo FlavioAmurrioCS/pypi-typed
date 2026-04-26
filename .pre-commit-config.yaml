@@ -21,7 +21,7 @@ repos:
       - id: taplo-format
       - id: taplo-lint
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.11
+    rev: v0.15.12
     hooks:
       - id: ruff-check
         types_or: [python, pyi, jupyter]
@@ -74,16 +74,16 @@ repos:
         require_serial: true
         additional_dependencies: [uv]
         stages: [manual]
-      - id: uv-pyright
-        name: uv-pyright
-        entry: env VIRTUAL_ENV= uv run --group types_other pyright
-        language: python
-        'types_or': [python, pyi]
-        require_serial: true
-        additional_dependencies: [uv]
+      # - id: uv-pyright
+      #   name: uv-pyright
+      #   entry: env VIRTUAL_ENV= uv run --group types_other pyright
+      #   language: python
+      #   'types_or': [python, pyi]
+      #   require_serial: true
+      #   additional_dependencies: [uv]
       - id: uv-test
         name: uv-test
-        entry: env VIRTUAL_ENV= uv run pytest
+        entry: env VIRTUAL_ENV= uv run pytest -n auto
         language: python
         types: [python]
         pass_filenames: false
