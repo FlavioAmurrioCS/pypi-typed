@@ -192,6 +192,69 @@ class ProjectStatsCmd(NamedTuple):
         return 0
 
 
+class NewestPackagesFeedCmd(NamedTuple):
+    """Get the newest packages feed."""
+
+    @classmethod
+    def arg_parser(cls, parser: argparse.ArgumentParser | None = None) -> argparse.ArgumentParser:
+        parser = parser or argparse.ArgumentParser()
+        parser.description = cls.__doc__ or "<PLACEHOLDER_DESCRIPTION>"
+        parser.formatter_class = argparse.RawTextHelpFormatter
+        parser.epilog = dedent("""\
+        Example:
+          %(prog)s <PLACEHOLDER_EXAMPLE>
+        """)
+        return parser
+
+    async def run(self) -> int:
+        response = await CLIENT.newest_packages_feed()
+        print(json.dumps(response, indent=2))
+        return 0
+
+
+class LatestUpdatesFeedCmd(NamedTuple):
+    """Get the latest updates feed."""
+
+    @classmethod
+    def arg_parser(cls, parser: argparse.ArgumentParser | None = None) -> argparse.ArgumentParser:
+        parser = parser or argparse.ArgumentParser()
+        parser.description = cls.__doc__ or "<PLACEHOLDER_DESCRIPTION>"
+        parser.formatter_class = argparse.RawTextHelpFormatter
+        parser.epilog = dedent("""\
+        Example:
+          %(prog)s <PLACEHOLDER_EXAMPLE>
+        """)
+        return parser
+
+    async def run(self) -> int:
+        response = await CLIENT.latest_updates_feed()
+        print(json.dumps(response, indent=2))
+        return 0
+
+
+class ProjectReleasesFeedCmd(NamedTuple):
+    """Get the project releases feed."""
+
+    project: str
+
+    @classmethod
+    def arg_parser(cls, parser: argparse.ArgumentParser | None = None) -> argparse.ArgumentParser:
+        parser = parser or argparse.ArgumentParser()
+        parser.description = cls.__doc__ or "<PLACEHOLDER_DESCRIPTION>"
+        parser.formatter_class = argparse.RawTextHelpFormatter
+        parser.epilog = dedent("""\
+        Example:
+          %(prog)s <PLACEHOLDER_EXAMPLE>
+        """)
+        parser.add_argument("project", help="The name of the project to get the releases feed for.")
+        return parser
+
+    async def run(self) -> int:
+        response = await CLIENT.project_releases_feed(project_name=self.project)
+        print(json.dumps(response, indent=2))
+        return 0
+
+
 ################################################################################
 # endregion: Commands
 ################################################################################
@@ -203,6 +266,9 @@ SUB_COMMANDS: dict[str, type[Cmd]] = {
     "release": ReleaseCmd,
     "provenance-for-file": ProvenanceForFileCmd,
     "project-stats": ProjectStatsCmd,
+    "newest-packages-feed": NewestPackagesFeedCmd,
+    "latest-updates-feed": LatestUpdatesFeedCmd,
+    "project-releases-feed": ProjectReleasesFeedCmd,
 }
 
 VERSION = "0.1.0"

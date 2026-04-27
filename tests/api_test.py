@@ -17,6 +17,7 @@ from pypi_typed.types.types import ProjectResponse
 from pypi_typed.types.types import ProjectStatsResponse
 from pypi_typed.types.types import ProvenanceForFileResponse
 from pypi_typed.types.types import ReleaseResponse
+from pypi_typed.types.types import RSSFeedResponse
 
 if TYPE_CHECKING:
     from typing import Literal
@@ -185,6 +186,38 @@ async def test_types_project_stats(base_url: str) -> None:
     validate_shape(response, ProjectStatsResponse)
 
 
+@pytest.mark.parametrize("base_url", [INDEX_PYPI])
+async def test_types_newest_packages_feed(base_url: str) -> None:
+    pypi_api_client = create_async_client(base_url=base_url)
+    response = await pypi_api_client.newest_packages_feed()
+    write_data_to_file(data=response, base_url=base_url, output="json", api="newest-packages-feed")
+    validate_shape(response, RSSFeedResponse)
+
+
+@pytest.mark.parametrize("base_url", [INDEX_PYPI])
+async def test_types_latest_updates_feed(base_url: str) -> None:
+    pypi_api_client = create_async_client(base_url=base_url)
+    response = await pypi_api_client.latest_updates_feed()
+    write_data_to_file(data=response, base_url=base_url, output="json", api="latest-updates-feed")
+    validate_shape(response, RSSFeedResponse)
+
+
+@pytest.mark.parametrize("base_url", [INDEX_PYPI])
+@pytest.mark.parametrize("project", projects)
+async def test_types_project_releases_feed(base_url: str, project: str) -> None:
+    pypi_api_client = create_async_client(base_url=base_url)
+    response = await pypi_api_client.project_releases_feed(project_name=project)
+    write_data_to_file(
+        data=response,
+        base_url=base_url,
+        output="json",
+        api="project-releases-feed",
+        project=project,
+    )
+    # validate_shape(response, ProjectReleasesFeedResponse)
+    validate_shape(response, RSSFeedResponse)
+
+
 async def test_parity_list_all_projects() -> None:
     html_client = create_async_client(INDEX_PYPI, output="html")
     json_client = create_async_client(INDEX_PYPI, output="json")
@@ -271,7 +304,7 @@ async def test_parity_get_distributions_for_project(project: str) -> None:
     assert html_response == json_response
 
 
-log_to_file = False
+log_to_file = True
 
 
 def write_data_to_file(  # noqa: PLR0913
@@ -285,7 +318,7 @@ def write_data_to_file(  # noqa: PLR0913
     filename: str = "",
 ) -> None:
     if log_to_file:
-        filename = f"/tmp/pypi_files/{base_url.replace('/', '_')}/{api}/{output}/{project}_{version}_{filename}.json"  # noqa: E501, S108
+        filename = f"/tmp/pypi_files/{base_url.replace('/', '')}/{api}/{output}/{project}_{version}_{filename}.json"  # noqa: E501, S108
         os.makedirs(os.path.dirname(filename), exist_ok=True)
         with open(filename, "w") as f:
             json.dump(data, f, indent=2)

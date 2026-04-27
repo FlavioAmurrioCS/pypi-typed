@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Literal
 
 from typing_extensions import NotRequired
+from typing_extensions import Required
 from typing_extensions import TypedDict
 
 _ListAllProjectsResponseMeta = TypedDict(
@@ -306,3 +307,29 @@ class ProjectResponse(TypedDict):
     urls: list[_ProjectResponseUrlFile]
     vulnerabilities: list[_ProjectResponseVulnerability]
     ownership: _ProjectResponseOwnership
+
+
+class _RSSFeedResponseRSSChannelItem(TypedDict):
+    title: Required[str]
+    link: Required[str]
+    description: Required[str | None]
+    author: NotRequired[str]
+    pubDate: str
+    guid: NotRequired[str]
+
+
+class _RSSFeedResponseRSSChannel(TypedDict):
+    title: Required[str]
+    link: Required[str]
+    description: Required[str]
+    language: str
+    item: list[_RSSFeedResponseRSSChannelItem]
+
+
+class _RSSFeedResponseRSS(TypedDict):
+    _attrs: dict[Literal["version"], Literal["2.0"]]
+    channel: _RSSFeedResponseRSSChannel
+
+
+class RSSFeedResponse(TypedDict):
+    rss: _RSSFeedResponseRSS

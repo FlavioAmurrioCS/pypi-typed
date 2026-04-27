@@ -15,6 +15,8 @@ from pypi_typed._index import html_to_listallprojects
 if TYPE_CHECKING:
     from collections.abc import Awaitable
     from collections.abc import Callable
+    from typing import Any
+    from xml.etree.ElementTree import Element
 
     from pypi_typed.types.http import Arguments
     from pypi_typed.types.http import AsyncHttpRequest
@@ -26,6 +28,7 @@ if TYPE_CHECKING:
     from pypi_typed.types.types import ProjectStatsResponse
     from pypi_typed.types.types import ProvenanceForFileResponse
     from pypi_typed.types.types import ReleaseResponse
+    from pypi_typed.types.types import RSSFeedResponse
 
     T = TypeVar("T")
     R = TypeVar("R")
@@ -256,9 +259,159 @@ class PypiStatsClient(Generic[HttpRequest]):
     ############################################################################
 
 
+def parse_xml_node(element: Element) -> Any:  # noqa: ANN401
+    """
+    Recursively parse an XML element into a plain Python structure.
+
+    - Element with only text → returns the stripped text string (or None)
+    - Element with child elements → returns a dict; repeated tags become lists
+    - Element with both text and children → text is stored under the "_text" key
+    - Attributes are stored under the "_attrs" key (omitted when empty)
+    """
+    result: dict[str, Any] = {}
+
+    # Attach attributes if present
+    if element.attrib:
+        result["_attrs"] = dict(element.attrib)
+
+    # Recurse into children
+    for child in element:
+        # Strip namespace, e.g. "{http://...}tag" → "tag"
+        tag = child.tag.split("}", 1)[-1] if "}" in child.tag else child.tag
+        value = parse_xml_node(child)
+
+        if tag in result:
+            # Promote to list on first collision, then append
+            if not isinstance(result[tag], list):
+                result[tag] = [result[tag]]
+            result[tag].append(value)
+        else:
+            result[tag] = value
+
+    # Handle text content
+    text = (element.text or "").strip()
+    if text:
+        if result:
+            # Mixed content: keep text alongside children
+            result["_text"] = text
+        else:
+            # Leaf node: return the text directly (clean and simple)
+            return text
+
+    return result or None
+
+
+def parse_xml_response(xml_string: str) -> RSSFeedResponse:
+    """
+    Parse an XML string into a nested dict / list structure.
+    Returns a dict with the root tag as the single top-level key.
+    """
+    from xml.etree.ElementTree import fromstring
+
+    root = fromstring(xml_string)  # noqa: S314
+    tag = root.tag.split("}", 1)[-1] if "}" in root.tag else root.tag
+    if tag != "rss":
+        msg = f"Expected root tag 'rss', got '{tag}'"
+        raise ValueError(msg)
+    return {tag: parse_xml_node(root)}  # type: ignore[misc]
+
+
+@dataclass
+class RSSFeedsClient(Generic[HttpRequest]):
+    ############################################################################
+    # region: RSS Feeds
+    ############################################################################
+    """
+    https://docs.pypi.org/api/feeds/
+    """
+
+    client: HttpRequest
+
+    @overload
+    def newest_packages_feed(
+        self: RSSFeedsClient[SyncHttpRequest],
+    ) -> RSSFeedResponse: ...
+    @overload
+    def newest_packages_feed(
+        self: RSSFeedsClient[AsyncHttpRequest],
+    ) -> Awaitable[RSSFeedResponse]: ...
+
+    def newest_packages_feed(
+        self,
+    ) -> RSSFeedResponse | Awaitable[RSSFeedResponse]:
+        """
+        https://docs.pypi.org/api/feeds/#newest-packages-feed
+        """
+        args: Arguments = {
+            "method": "GET",
+            "url": "/rss/packages.xml",
+        }
+        return helper(
+            self.client,
+            args,
+            lambda x: parse_xml_response(x.text),
+        )
+
+    @overload
+    def latest_updates_feed(
+        self: RSSFeedsClient[SyncHttpRequest],
+    ) -> RSSFeedResponse: ...
+    @overload
+    def latest_updates_feed(
+        self: RSSFeedsClient[AsyncHttpRequest],
+    ) -> Awaitable[RSSFeedResponse]: ...
+
+    def latest_updates_feed(
+        self,
+    ) -> RSSFeedResponse | Awaitable[RSSFeedResponse]:
+        """
+        https://docs.pypi.org/api/feeds/#latest-updates-feed
+        """
+        args: Arguments = {
+            "method": "GET",
+            "url": "/rss/updates.xml",
+        }
+        return helper(
+            self.client,
+            args,
+            lambda x: parse_xml_response(x.text),
+        )
+
+    @overload
+    def project_releases_feed(
+        self: RSSFeedsClient[SyncHttpRequest],
+        project_name: str,
+    ) -> RSSFeedResponse: ...
+    @overload
+    def project_releases_feed(
+        self: RSSFeedsClient[AsyncHttpRequest],
+        project_name: str,
+    ) -> Awaitable[RSSFeedResponse]: ...
+
+    def project_releases_feed(
+        self,
+        project_name: str,
+    ) -> RSSFeedResponse | Awaitable[RSSFeedResponse]:
+        """
+        https://docs.pypi.org/api/feeds/#project-releases-feed
+        """
+        args: Arguments = {
+            "method": "GET",
+            "url": f"/rss/project/{project_name}/releases.xml",
+        }
+        return helper(
+            self.client,
+            args,
+            lambda x: parse_xml_response(x.text),
+        )
+
+    ############################################################################
+    # endregion: RSS Feeds
+    ############################################################################
+
+
 # class PyPiUploadAPI: ...
 # BigQuery Datasets
-# RSS Feeds
 # Secret reporting API
 
 
@@ -268,6 +421,7 @@ class PypiApiClient(
     PypiJsonClient[HttpRequest],
     PypiIntegrityClient[HttpRequest],
     PypiStatsClient[HttpRequest],
+    RSSFeedsClient[HttpRequest],
 ): ...
 
 
@@ -277,12 +431,15 @@ if __name__ == "__main__":  # pragma: no cover
         import httpx
 
         # base_url = "https://pypi.devinfra.sentry.io/"
-        base_url = "https://flavioamurriocs.github.io/pypi/"
+        # base_url = "https://flavioamurriocs.github.io/pypi/"
+        base_url = "https://pypi.org/"
         combined: PypiApiClient[AsyncHttpRequest] = PypiApiClient(
             client=httpx.AsyncClient(base_url=base_url).request
         )
         # e = await combined.json.get_a_project("uv-to-pipfile")
-        e = await combined.list_all_projects()
+        # e = await combined.list_all_projects()
+        # e = await combined.project_releases_feed("uv-to-pipfile")
+        e = await combined.newest_packages_feed()
         print(e)
 
     import asyncio
