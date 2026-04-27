@@ -29,6 +29,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+cli = [
+  "httpx",
+]
 
 [dependency-groups]
 dev = [
@@ -75,7 +78,7 @@ Issues = "https://github.com/FlavioAmurrioCS/pypi-typed/issues"
 Source = "https://github.com/FlavioAmurrioCS/pypi-typed"
 
 [project.scripts]
-pypi = "pypi_typed.__main__:main"
+pypi = "pypi_typed.main:main_sync"
 
 ###############################################################################
 # region: hatch

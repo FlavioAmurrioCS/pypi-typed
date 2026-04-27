@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 from typing import TYPE_CHECKING
 
 import httpx
@@ -48,6 +50,20 @@ projects = [
     "virtualenv",
     "uv-to-pipfile",
 ]
+projects = [
+    "aws-http-auth",
+    "comma-cli",
+    "depsdev",
+    "dev-toolbox",
+    "direct-deps",
+    "lambda-dev-server",
+    "log-tool",
+    "persistent-cache-decorator",
+    "runtool",
+    "typedfzf",
+    "uv-to-pipfile",
+]
+
 projects_versions = [("lambda-dev-server", "0.0.8")]
 project_version_filenames = [
     ("lambda-dev-server", "0.0.8", "lambda_dev_server-0.0.8-py3-none-any.whl")
@@ -77,10 +93,11 @@ INDEX_SENTRY = "https://pypi.devinfra.sentry.io/"
 async def test_types_list_all_projects(base_url: str, output: Literal["json", "html"]) -> None:
     pypi_api_client = create_async_client(base_url=base_url, output=output)
     response = await pypi_api_client.list_all_projects()
+    write_data_to_file(data=response, base_url=base_url, output=output, api="list-all-projects")
     validate_shape(response, ListAllProjectsResponse)
 
 
-@pytest.mark.parametrize("base_url", [INDEX_PYPI])
+@pytest.mark.parametrize("base_url", [INDEX_PYPI, INDEX_FLAVIO])
 @pytest.mark.parametrize("output", ["json", "html"])
 @pytest.mark.parametrize("project", projects)
 async def test_types_get_distributions_for_project(
@@ -88,22 +105,52 @@ async def test_types_get_distributions_for_project(
 ) -> None:
     pypi_api_client = create_async_client(base_url=base_url, output=output)
     response = await pypi_api_client.get_distributions_for_project(project=project)
+    write_data_to_file(
+        data=response,
+        base_url=base_url,
+        output=output,
+        api="get-distributions-for-project",
+        project=project,
+    )
     validate_shape(response, DistributionsForProjectResponse)
 
 
-@pytest.mark.parametrize("base_url", [INDEX_PYPI, INDEX_FLAVIO])
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        INDEX_PYPI,
+        # INDEX_FLAVIO,  # SKIP FOR NOW UNTIL TYPES ARE CEMENTED
+    ],
+)
 @pytest.mark.parametrize("project", ["uv-to-pipfile"])
 async def test_types_get_a_project(base_url: str, project: str) -> None:
     pypi_api_client = create_async_client(base_url=base_url, output="json")
     response = await pypi_api_client.get_a_project(project=project)
+    write_data_to_file(
+        data=response, base_url=base_url, output="json", api="get-a-project", project=project
+    )
     validate_shape(response, ProjectResponse)
 
 
-@pytest.mark.parametrize("base_url", [INDEX_PYPI, INDEX_FLAVIO])
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        INDEX_PYPI,
+        # INDEX_FLAVIO,  # SKIP FOR NOW UNTIL TYPES ARE CEMENTED
+    ],
+)
 @pytest.mark.parametrize(("project", "version"), projects_versions)
 async def test_types_get_a_release(base_url: str, project: str, version: str) -> None:
     pypi_api_client = create_async_client(base_url=base_url, output="json")
     response = await pypi_api_client.get_a_release(project=project, version=version)
+    write_data_to_file(
+        data=response,
+        base_url=base_url,
+        output="json",
+        api="get-a-release",
+        project=project,
+        version=version,
+    )
     validate_shape(response, ReleaseResponse)
 
 
@@ -118,6 +165,15 @@ async def test_types_get_provenance_for_file(
         version=version,
         filename=filename,
     )
+    write_data_to_file(
+        data=response,
+        base_url=base_url,
+        output="json",
+        api="provenance-for-file",
+        project=project,
+        version=version,
+        filename=filename,
+    )
     validate_shape(response, ProvenanceForFileResponse)
 
 
@@ -125,6 +181,7 @@ async def test_types_get_provenance_for_file(
 async def test_types_project_stats(base_url: str) -> None:
     pypi_api_client = create_async_client(base_url=base_url)
     response = await pypi_api_client.project_stats()
+    write_data_to_file(data=response, base_url=base_url, output="json", api="project-stats")
     validate_shape(response, ProjectStatsResponse)
 
 
@@ -133,6 +190,13 @@ async def test_parity_list_all_projects() -> None:
     json_client = create_async_client(INDEX_PYPI, output="json")
     html_response, json_response = await asyncio.gather(
         html_client.list_all_projects(), json_client.list_all_projects()
+    )
+
+    write_data_to_file(
+        data=html_response, base_url=INDEX_PYPI, output="html", api="list-all-projects"
+    )
+    write_data_to_file(
+        data=json_response, base_url=INDEX_PYPI, output="json", api="list-all-projects"
     )
     # We expect html and json responses to be different,
     # if they are the same it means json endpoint is returning html instead of json
@@ -175,6 +239,20 @@ async def test_parity_get_distributions_for_project(project: str) -> None:
         html_client.get_distributions_for_project(project=project),
         json_client.get_distributions_for_project(project=project),
     )
+    write_data_to_file(
+        data=html_response,
+        base_url=INDEX_PYPI,
+        output="html",
+        api="distributions-for-project",
+        project=project,
+    )
+    write_data_to_file(
+        data=json_response,
+        base_url=INDEX_PYPI,
+        output="json",
+        api="distributions-for-project",
+        project=project,
+    )
 
     # We expect html and json responses to be different,
     # if they are the same it means json endpoint is returning html instead of json
@@ -191,3 +269,23 @@ async def test_parity_get_distributions_for_project(project: str) -> None:
     json_response["versions"].sort()
 
     assert html_response == json_response
+
+
+log_to_file = False
+
+
+def write_data_to_file(  # noqa: PLR0913
+    *,
+    data: object,
+    base_url: str,
+    output: str,
+    api: str,
+    project: str = "",
+    version: str = "",
+    filename: str = "",
+) -> None:
+    if log_to_file:
+        filename = f"/tmp/pypi_files/{base_url.replace('/', '_')}/{api}/{output}/{project}_{version}_{filename}.json"  # noqa: E501, S108
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        with open(filename, "w") as f:
+            json.dump(data, f, indent=2)
