@@ -8,7 +8,7 @@ name = "pypi-typed"
 dynamic = ["version"]
 description = "Awesome project description."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = "MIT"
 keywords = []
 authors = [
@@ -17,7 +17,6 @@ authors = [
 classifiers = [
   "Development Status :: 4 - Beta",
   "Programming Language :: Python",
-  "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
@@ -30,6 +29,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+cli = [
+  "httpx",
+  "orjson",
+]
 
 [dependency-groups]
 dev = [
@@ -38,7 +41,14 @@ dev = [
 ]
 test = [
   "pytest",
+  "pytest-asyncio",
+  "pytest-cov",
+  "pytest-xdist",
+  "httpx",
+  "pydantic",
+  "typing_extensions",
   "tomli ; python_version < '3.11'",
+  "persistent-cache-decorator",
 ]
 types_packages = [
   { include-group = "test" },
@@ -53,6 +63,7 @@ types_other = [
   "pyrefly",
   "pyright[nodejs]",
   "ty",
+  "zuban",
 ]
 docs = [
   "zensical",
@@ -68,7 +79,7 @@ Issues = "https://github.com/FlavioAmurrioCS/pypi-typed/issues"
 Source = "https://github.com/FlavioAmurrioCS/pypi-typed"
 
 [project.scripts]
-pypi-typed = "pypi_typed.__main__:main"
+pypi = "pypi_typed.main:main_sync"
 
 ###############################################################################
 # region: hatch
@@ -94,7 +105,6 @@ check = "mypy --install-types --non-interactive {args:src/pypi_typed tests}"
 
 [[tool.hatch.envs.hatch-test.matrix]]
 python = [
-  "3.9",
   "3.10",
   "3.11",
   "3.12",
@@ -106,12 +116,12 @@ python = [
 ###############################################################################
 
 ###############################################################################
-# region: uv
+# region: pytest
 ###############################################################################
-[tool.uv.pip]
-index-url = "https://pypi.org/simple"
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
 ###############################################################################
-# endregion: uv
+# endregion: pytest
 ###############################################################################
 
 ###############################################################################
@@ -122,6 +132,8 @@ source_pkgs = ["pypi_typed", "tests"]
 branch = true
 parallel = true
 omit = [
+  "src/pypi_typed/types/http.py",
+  "src/pypi_typed/_version.py",
 ]
 
 [tool.coverage.paths]
@@ -142,7 +154,7 @@ exclude_lines = [
 # region: pyright
 ###############################################################################
 [tool.pyright]
-pythonVersion = "3.9"
+pythonVersion = "3.10"
 ###############################################################################
 # endregion: pyright
 ###############################################################################
@@ -151,7 +163,7 @@ pythonVersion = "3.9"
 # region: mypy
 ###############################################################################
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 check_untyped_defs = true
 disallow_any_generics = true
 disallow_incomplete_defs = true
