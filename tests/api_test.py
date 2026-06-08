@@ -89,6 +89,52 @@ INDEX_FLAVIO = "https://flavioamurriocs.github.io/pypi/"
 INDEX_SENTRY = "https://pypi.devinfra.sentry.io/"
 
 
+async def test_parity_list_all_projects() -> None:
+    html_client = create_async_client(INDEX_PYPI, output="html")
+    json_client = create_async_client(INDEX_PYPI, output="json")
+    html_response, json_response = await asyncio.gather(
+        html_client.list_all_projects(), json_client.list_all_projects()
+    )
+
+    write_data_to_file(
+        data=html_response, base_url=INDEX_PYPI, output="html", api="list-all-projects"
+    )
+    write_data_to_file(
+        data=json_response, base_url=INDEX_PYPI, output="json", api="list-all-projects"
+    )
+    # We expect html and json responses to be different,
+    # if they are the same it means json endpoint is returning html instead of json
+    assert html_response != json_response
+
+    html_names = {x["name"] for x in html_response["projects"]}
+    json_names = {x["name"] for x in json_response["projects"]}
+    common_names = html_names & json_names
+    # only_html_names = html_names - json_names
+    # only_json_names = json_names - html_names
+
+    # # print()
+    # # print(f"Only in HTML: {len(only_html_names)=} {sorted(only_html_names)}")
+    # # print(f"Only in JSON: {len(only_json_names)=} {sorted(only_json_names)}")
+    # diff_limit = 100
+    # assert len(only_html_names) < diff_limit
+    # assert len(only_json_names) < diff_limit
+
+    json_response["projects"] = sorted(
+        (p for p in json_response["projects"] if p["name"] in common_names), key=lambda x: x["name"]
+    )
+    html_response["projects"] = sorted(
+        (p for p in html_response["projects"] if p["name"] in common_names), key=lambda x: x["name"]
+    )
+    for p in json_response["projects"]:
+        p.pop("_last-serial", None)  # type: ignore[misc]
+    for p in html_response["projects"]:
+        p.pop("_last-serial", None)  # type: ignore[misc]
+    html_response["meta"].pop("_last-serial", None)  # type: ignore[misc]
+    json_response["meta"].pop("_last-serial", None)  # type: ignore[misc]
+
+    assert html_response == json_response
+
+
 @pytest.mark.parametrize("base_url", [INDEX_PYPI, INDEX_FLAVIO, INDEX_SENTRY])
 @pytest.mark.parametrize("output", ["json", "html"])
 async def test_types_list_all_projects(base_url: str, output: Literal["json", "html"]) -> None:
@@ -216,52 +262,6 @@ async def test_types_project_releases_feed(base_url: str, project: str) -> None:
     )
     # validate_shape(response, ProjectReleasesFeedResponse)
     validate_shape(response, RSSFeedResponse)
-
-
-async def test_parity_list_all_projects() -> None:
-    html_client = create_async_client(INDEX_PYPI, output="html")
-    json_client = create_async_client(INDEX_PYPI, output="json")
-    html_response, json_response = await asyncio.gather(
-        html_client.list_all_projects(), json_client.list_all_projects()
-    )
-
-    write_data_to_file(
-        data=html_response, base_url=INDEX_PYPI, output="html", api="list-all-projects"
-    )
-    write_data_to_file(
-        data=json_response, base_url=INDEX_PYPI, output="json", api="list-all-projects"
-    )
-    # We expect html and json responses to be different,
-    # if they are the same it means json endpoint is returning html instead of json
-    assert html_response != json_response
-
-    html_names = {x["name"] for x in html_response["projects"]}
-    json_names = {x["name"] for x in json_response["projects"]}
-    common_names = html_names & json_names
-    only_html_names = html_names - json_names
-    only_json_names = json_names - html_names
-
-    # print()
-    # print(f"Only in HTML: {len(only_html_names)=} {sorted(only_html_names)}")
-    # print(f"Only in JSON: {len(only_json_names)=} {sorted(only_json_names)}")
-    diff_limit = 100
-    assert len(only_html_names) < diff_limit
-    assert len(only_json_names) < diff_limit
-
-    json_response["projects"] = sorted(
-        (p for p in json_response["projects"] if p["name"] in common_names), key=lambda x: x["name"]
-    )
-    html_response["projects"] = sorted(
-        (p for p in html_response["projects"] if p["name"] in common_names), key=lambda x: x["name"]
-    )
-    for p in json_response["projects"]:
-        p.pop("_last-serial", None)  # type: ignore[misc]
-    for p in html_response["projects"]:
-        p.pop("_last-serial", None)  # type: ignore[misc]
-    html_response["meta"].pop("_last-serial", None)  # type: ignore[misc]
-    json_response["meta"].pop("_last-serial", None)  # type: ignore[misc]
-
-    assert html_response == json_response
 
 
 @pytest.mark.parametrize("project", projects)

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from inspect import isawaitable
 from typing import TYPE_CHECKING
@@ -11,6 +10,7 @@ from typing import overload
 
 from pypi_typed._index import html_to_distribution
 from pypi_typed._index import html_to_listallprojects
+from pypi_typed._lazy import lazy
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
@@ -65,9 +65,14 @@ def helper(
 
 def html_json_response_handler(text: str, parser: Callable[[str], T]) -> T:
     try:
-        return json.loads(text)  # zuban: ignore[no-any-return]
-    except json.JSONDecodeError:
+        return lazy.json_loads(text)  # zuban: ignore[no-any-return]
+    except Exception as _e:  # noqa: BLE001
         return parser(text)
+
+
+def handle_response(response: RequestResponse, mapper: Callable[[str], T]) -> T:
+    response.raise_for_status()
+    return mapper(response.text)
 
 
 @dataclass
@@ -97,9 +102,14 @@ class PypiIndexClient(Generic[HttpRequest]):
             "method": "GET",
             "url": "/simple/",
             "headers": {"Accept": f"application/vnd.pypi.simple.v1+{self.output}"},
+            "timeout": 30,
         }
         return helper(
-            self.client, args, lambda x: html_json_response_handler(x.text, html_to_listallprojects)
+            self.client,
+            args,
+            lambda x: handle_response(
+                x, lambda text: html_json_response_handler(text, html_to_listallprojects)
+            ),
         )
 
     @overload
@@ -123,7 +133,11 @@ class PypiIndexClient(Generic[HttpRequest]):
             "headers": {"Accept": f"application/vnd.pypi.simple.v1+{self.output}"},
         }
         return helper(
-            self.client, args, lambda x: html_json_response_handler(x.text, html_to_distribution)
+            self.client,
+            args,
+            lambda x: handle_response(
+                x, lambda text: html_json_response_handler(text, html_to_distribution)
+            ),
         )
 
     ############################################################################
@@ -158,7 +172,7 @@ class PypiJsonClient(Generic[HttpRequest]):
             "url": f"/pypi/{project}/json",
             "headers": {"Accept": "application/json"},
         }
-        return helper(self.client, args, lambda x: json.loads(x.text))
+        return helper(self.client, args, lambda x: handle_response(x, lazy.json_loads))
 
     @overload
     def get_a_release(
@@ -180,7 +194,7 @@ class PypiJsonClient(Generic[HttpRequest]):
             "url": f"/pypi/{project}/{version}/json",
             "headers": {"Accept": "application/json"},
         }
-        return helper(self.client, args, lambda x: json.loads(x.text))
+        return helper(self.client, args, lambda x: handle_response(x, lazy.json_loads))
 
     ############################################################################
     # endregion: JSON API
@@ -218,7 +232,7 @@ class PypiIntegrityClient(Generic[HttpRequest]):
             "url": f"/integrity/{project}/{version}/{filename}/provenance",
             "headers": {"Accept": "application/vnd.pypi.integrity.v1+json"},
         }
-        return helper(self.client, args, lambda x: json.loads(x.text))
+        return helper(self.client, args, lambda x: handle_response(x, lazy.json_loads))
 
     ############################################################################
     # endregion: Integrity API
@@ -252,7 +266,7 @@ class PypiStatsClient(Generic[HttpRequest]):
             "url": "/stats/",
             "headers": {"Accept": "application/json"},
         }
-        return helper(self.client, args, lambda x: json.loads(x.text))
+        return helper(self.client, args, lambda x: handle_response(x, lazy.json_loads))
 
     ############################################################################
     # endregion: Stats API
@@ -349,7 +363,7 @@ class RSSFeedsClient(Generic[HttpRequest]):
         return helper(
             self.client,
             args,
-            lambda x: parse_xml_response(x.text),
+            lambda x: handle_response(x, parse_xml_response),
         )
 
     @overload
@@ -374,7 +388,7 @@ class RSSFeedsClient(Generic[HttpRequest]):
         return helper(
             self.client,
             args,
-            lambda x: parse_xml_response(x.text),
+            lambda x: handle_response(x, parse_xml_response),
         )
 
     @overload
@@ -402,7 +416,7 @@ class RSSFeedsClient(Generic[HttpRequest]):
         return helper(
             self.client,
             args,
-            lambda x: parse_xml_response(x.text),
+            lambda x: handle_response(x, parse_xml_response),
         )
 
     ############################################################################

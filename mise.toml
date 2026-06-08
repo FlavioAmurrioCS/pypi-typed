@@ -1,0 +1,5 @@
+[tools]
+pre-commit = "latest"
+python = "3.10"
+ruff = "latest"
+uv = "latest"
